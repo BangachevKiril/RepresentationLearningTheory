@@ -2,7 +2,7 @@ Experiments for trainable bias and temperature using the [Sigmoid Loss for Langu
                                                           
 The experiments follow the [upcoming paper](). In the paper, we describe the geometry of zero-loss solutions to SigLIP and test properties of it:
 
-1. We perform experiments with real data using the [image-text model of Google Research](big_vision/models/proj/image_text) trained with SigLIP.
+1. We perform experiments with real data using the [image-text model of Google Research](https://github.com/google-research/big_vision/tree/main/big_vision/models/proj/image_text) trained with SigLIP.
 2. Our theoretical results suggest several modifications and reparamterizations depending on the concrete task of interest. These include:
    
    A) Extension to more modalities
