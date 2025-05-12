@@ -167,7 +167,7 @@ class SigLIPExperiment:
 
         # Create histogram plot
         plt.figure(figsize=(10, 6))
-        plt.hist(matching_pairs, bins= 10, alpha=0.5, label='Matching pairs (U_i, V_i)', color='blue', density=True, log = True)
+        plt.hist(matching_pairs, bins= 15, alpha=0.5, label='Matching pairs (U_i, V_i)', color='blue', density=True, log = True)
         plt.hist(non_matching_pairs, bins=15, alpha=0.5, label='Non-matching pairs (U_i, V_j)', color='green', density=True, log = True)
 
         # Add red line showing separation between max non-matching and min matching
