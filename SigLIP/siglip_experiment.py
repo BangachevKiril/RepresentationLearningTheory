@@ -10,70 +10,103 @@ from mpl_toolkits.mplot3d import Axes3D
 
 class SigLIPExperiment:
     def __init__(self, n_classes=100, dim=3, n_epochs=int(5e4), device=None):
-        """
-        Initialize a SigLIP experiment.
-        
-        Args:
-            n_classes (int): Number of classes/vector pairs
-            dim (int): Dimension of the vectors
-            n_epochs (int): Number of training epochs
-            device (str): Device to run the experiment on ('cuda' or 'cpu')
-        """
         self.n_classes = n_classes
         self.dim = dim
         self.n_epochs = n_epochs
-        self.device = device if device else ('cuda' if torch.cuda.is_available() else 'cpu')
-        
-        # Initialize vectors
-        self.U_init, self.V_init = generate_class_vectors(n_classes, dim, self.device)
-        self.U = nn.Parameter(self.U_init / torch.norm(self.U_init, dim=1, keepdim=True))
-        self.V = nn.Parameter(self.V_init / torch.norm(self.V_init, dim=1, keepdim=True))
-        
-    def train(self, relative_bias, temperature=10.0, trainable_bias=False):
+        self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
+        self.U = None
+        self.V = None
+
+    def train(self,
+              relative_bias: float,
+              temperature: float = 10.0,
+              trainable_bias: bool = False,
+              trainable_temp: bool = True,
+              fixed_U: torch.Tensor = None,
+              initial_x: float = 0.0,
+              lr: float = 1e-2):
         """
-        Train the model with specified parameters.
-        
-        Args:
-            relative_bias (float): Initial relative bias value
-            temperature (float): Initial temperature value
-            trainable_bias (bool): Whether to make bias trainable
-            
-        Returns:
-            tuple: (U, V, criterion, losses)
+        If `fixed_U` is not None, we:
+          - normalize & freeze it as self.U
+          - introduce a scalar x (initialized to initial_x) so that δ = sigmoid(x)
+          - only train x and V (plus any bias/temperature in the criterion)
+        Otherwise we train both U and V as before.
         """
-        # Initialize loss function
-        criterion = SigLIPLoss(temperature=temperature, 
-                             relative_bias=relative_bias, 
-                             trainable_bias=trainable_bias).to(self.device)
-        
-        # Create optimizer
-        optimizer = torch.optim.Adam([
-            {'params': self.U, 'lr': 0.01},
-            {'params': self.V, 'lr': 0.01},
-            {'params': criterion.parameters(), 'lr': 0.01}
-        ])
-        
-        # Training loop
+
+        if fixed_U is not None:
+            U0 = fixed_U.to(self.device)
+            U0 = U0 / U0.norm(dim=1, keepdim=True)
+            self.U = nn.Parameter(U0, requires_grad=False)
+
+            V0 = torch.randn(self.n_classes, self.dim, device=self.device)
+            V0 = V0 / V0.norm(dim=1, keepdim=True)
+            self.V = nn.Parameter(V0, requires_grad=True)
+
+            self.x = nn.Parameter(torch.tensor(initial_x, device=self.device))
+        else:
+            U_init, V_init = generate_class_vectors(self.n_classes, self.dim, self.device)
+            self.U = nn.Parameter(U_init / torch.norm(U_init, dim=1, keepdim=True))
+            self.V = nn.Parameter(V_init / torch.norm(V_init, dim=1, keepdim=True))
+            self.x = None
+
+        criterion = SigLIPLoss(
+            temperature=temperature,
+            relative_bias=relative_bias,
+            trainable_temp=trainable_temp,
+            trainable_bias=trainable_bias
+        ).to(self.device)
+
+        params = [{'params': self.V, 'lr': lr},
+                  *([{'params': [self.x], 'lr': lr}] if self.x is not None else [{'params': [self.U], 'lr': lr}]),
+                  {'params': criterion.parameters(), 'lr': lr}]
+        optimizer = torch.optim.Adam(params)
+
         losses = []
         for epoch in range(self.n_epochs):
             optimizer.zero_grad()
-            loss = criterion(self.U, self.V)
+
+            # if we're in the "fixed_U" regime, build the extended vectors
+            if self.x is not None:
+                delta = torch.sigmoid(self.x)
+                extra = torch.sqrt(1 - delta**2)
+                extra_col = extra.expand(self.n_classes, 1)
+                U_ext = torch.cat([delta * self.U, extra_col], dim=1)
+                V_ext = torch.cat([delta * self.V, -extra_col], dim=1)
+                loss = criterion(U_ext, V_ext)
+            else:
+                loss = criterion(self.U, self.V)
+
+
             loss.backward()
             optimizer.step()
-            
-            # Project back onto unit sphere
+
+            # re‐project U,V back onto unit‐sphere
             with torch.no_grad():
-                self.U.data = self.U.data / torch.norm(self.U.data, dim=1, keepdim=True)
-                self.V.data = self.V.data / torch.norm(self.V.data, dim=1, keepdim=True)
-            
+                if self.x is None: 
+                    self.U.data = self.U.data / self.U.data.norm(dim=1, keepdim=True)
+                self.V.data = self.V.data / self.V.data.norm(dim=1, keepdim=True)
+                # print(self.U.data.norm(dim =1, keepdim=True))
+
             losses.append(loss.item())
-            
+
             if (epoch + 1) % 100 == 0:
-                print(f'Epoch [{epoch+1}/{self.n_epochs}], Loss: {loss.item():.4f}, '
-                      f'Temperature: {criterion.get_temperature():.4f}, '
-                      f'Relative bias: {criterion.get_bias():.4f}')
-        
-        return self.U, self.V, criterion, losses
+                tb = criterion.get_temperature()
+                rb = criterion.get_bias()
+                if self.x is not None:
+                    print(f"[{epoch+1}/{self.n_epochs}]  "
+                          f"loss={loss:.4f}  δ={delta:.4f}  T={tb:.4f}  rb={rb:.4f}")
+                else:
+                    print(f"[{epoch+1}/{self.n_epochs}]  "
+                          f"loss={loss:.4f}  T={tb:.4f}  rb={rb:.4f}")
+        if self.x is None:
+            return self.U, self.V, criterion, losses
+        else:
+            delta = torch.sigmoid(self.x)
+            extra = torch.sqrt(1 - delta**2)
+            extra_col = extra.expand(self.n_classes, 1)
+            U_ext = torch.cat([delta * self.U, extra_col], dim=1)
+            V_ext = torch.cat([delta * self.V, -extra_col], dim=1)
+            return U_ext, V_ext, criterion, losses, self.x
     
     def plot_vectors(self, U, V, criterion, ax=None):
         """
@@ -89,11 +122,9 @@ class SigLIPExperiment:
             fig = plt.figure(figsize=(10, 10))
             ax = fig.add_subplot(111, projection='3d')
         
-        # Move vectors to CPU and convert to numpy
         U_np = U.detach().cpu().numpy()
         V_np = V.detach().cpu().numpy()
         
-        # Plot unit sphere wireframe
         u = np.linspace(0, 2 * np.pi, 30)
         v = np.linspace(0, np.pi, 30)
         x = np.outer(np.cos(u), np.sin(v))
@@ -124,7 +155,35 @@ class SigLIPExperiment:
         ax.set_box_aspect([1, 1, 1])
         
         return ax
-    
+    def plot_inner_product_gap(self, U_final, V_final):
+        inner_products = torch.matmul(U_final, V_final.t())
+
+        # Get matching pairs (diagonal elements)
+        matching_pairs = torch.diag(inner_products).detach().cpu().numpy()
+
+        # Get non-matching pairs (off-diagonal elements)
+        mask = ~torch.eye(self.n_classes, dtype=bool, device=self.device)
+        non_matching_pairs = inner_products[mask].detach().cpu().numpy()
+
+        # Create histogram plot
+        plt.figure(figsize=(10, 6))
+        plt.hist(matching_pairs, bins= 10, alpha=0.5, label='Matching pairs (U_i, V_i)', color='blue', density=True, log = True)
+        plt.hist(non_matching_pairs, bins=15, alpha=0.5, label='Non-matching pairs (U_i, V_j)', color='green', density=True, log = True)
+
+        # Add red line showing separation between max non-matching and min matching
+        min_matching = np.min(matching_pairs)
+        max_non_matching = np.max(non_matching_pairs)
+        midpoint = (min_matching + max_non_matching) / 2
+        plt.axvline(x=midpoint, color='red', linestyle='--', label='Separation Point')
+
+        plt.xlabel('Inner Product Value')
+        plt.ylabel('Density')
+        plt.title('Distribution of Inner Products (Normalized)')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.show()
+
+
     def calculate_margin(self, U, V):
         """
         Calculate the margin between matching and non-matching pairs.
