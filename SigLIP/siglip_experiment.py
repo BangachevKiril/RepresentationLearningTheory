@@ -9,13 +9,14 @@ from matplotlib.gridspec import GridSpec
 from mpl_toolkits.mplot3d import Axes3D
 
 class SigLIPExperiment:
-    def __init__(self, n_classes=100, dim=3, n_epochs=int(5e4), device=None):
+    def __init__(self, n_classes=100, dim=3, n_epochs=int(5e4), device=None, when_to_print =100):
         self.n_classes = n_classes
         self.dim = dim
         self.n_epochs = n_epochs
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         self.U = None
         self.V = None
+        self.when_to_print = when_to_print
 
     def train(self,
               relative_bias: float,
@@ -23,6 +24,7 @@ class SigLIPExperiment:
               trainable_bias: bool = False,
               trainable_temp: bool = True,
               fixed_U: torch.Tensor = None,
+              explicit_adapter: bool = False,
               initial_x: float = 0.0,
               lr: float = 1e-2):
         """
@@ -33,7 +35,7 @@ class SigLIPExperiment:
         Otherwise we train both U and V as before.
         """
 
-        if fixed_U is not None:
+        if (fixed_U is not None) and explicit_adapter:
             U0 = fixed_U.to(self.device)
             U0 = U0 / U0.norm(dim=1, keepdim=True)
             self.U = nn.Parameter(U0, requires_grad=False)
@@ -43,6 +45,15 @@ class SigLIPExperiment:
             self.V = nn.Parameter(V0, requires_grad=True)
 
             self.x = nn.Parameter(torch.tensor(initial_x, device=self.device))
+        elif fixed_U is not None:
+            U0 = fixed_U.to(self.device)
+            U0 = U0 / U0.norm(dim=1, keepdim=True)
+            self.U = nn.Parameter(U0, requires_grad=False)
+
+            V0 = torch.randn(self.n_classes, self.dim, device=self.device)
+            V0 = V0 / V0.norm(dim=1, keepdim=True)
+            self.V = nn.Parameter(V0, requires_grad=True)
+            self.x = None
         else:
             U_init, V_init = generate_class_vectors(self.n_classes, self.dim, self.device)
             self.U = nn.Parameter(U_init / torch.norm(U_init, dim=1, keepdim=True))
@@ -89,7 +100,7 @@ class SigLIPExperiment:
 
             losses.append(loss.item())
 
-            if (epoch + 1) % 100 == 0:
+            if (epoch + 1) % self.when_to_print == 0:
                 tb = criterion.get_temperature()
                 rb = criterion.get_bias()
                 if self.x is not None:
