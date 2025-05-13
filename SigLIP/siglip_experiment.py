@@ -168,7 +168,7 @@ class SigLIPExperiment:
         # Create histogram plot
         plt.figure(figsize=(10, 6))
         plt.hist(matching_pairs, bins= 15, alpha=0.5, label='Matching pairs (U_i, V_i)', color='blue', density=True, log = True)
-        plt.hist(non_matching_pairs, bins=15, alpha=0.5, label='Non-matching pairs (U_i, V_j)', color='green', density=True, log = True)
+        plt.hist(non_matching_pairs, bins=15, alpha=0.5, label='Non-matching pairs (U_i, V_j)', color='red', density=True, log = True)
 
         # Add red line showing separation between max non-matching and min matching
         min_matching = np.min(matching_pairs)
@@ -176,10 +176,10 @@ class SigLIPExperiment:
         midpoint = (min_matching + max_non_matching) / 2
         plt.axvline(x=midpoint, color='red', linestyle='--', label='Separation Point')
 
-        plt.xlabel('Inner Product Value')
-        plt.ylabel('Density')
-        plt.title('Distribution of Inner Products (Normalized)')
-        plt.legend()
+        plt.xlabel('Inner Product Value',fontsize= 16)
+        plt.ylabel('Density',fontsize= 16)
+        plt.title('Distribution of Inner Products (Normalized)',fontsize= 20)
+        plt.legend(fontsize= 16)
         plt.grid(True, alpha=0.3)
         plt.show()
 
