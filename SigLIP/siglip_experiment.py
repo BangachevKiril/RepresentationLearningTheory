@@ -9,7 +9,8 @@ from matplotlib.gridspec import GridSpec
 from mpl_toolkits.mplot3d import Axes3D
 
 class SigLIPExperiment:
-    def __init__(self, n_classes=100, dim=3, n_epochs=int(5e4), device=None, when_to_print =100):
+    def __init__(self, n_classes=100, dim=3, n_epochs=int(5e4), device=None, when_to_print =100,
+                 relative_bias_parameterization = True):
         self.n_classes = n_classes
         self.dim = dim
         self.n_epochs = n_epochs
@@ -17,9 +18,11 @@ class SigLIPExperiment:
         self.U = None
         self.V = None
         self.when_to_print = when_to_print
+        self.relative_bias_parameterization = relative_bias_parameterization
 
     def train(self,
-              relative_bias: float,
+              relative_bias: float = 0.0,
+              bias: float = 0.0,
               temperature: float = 10.0,
               trainable_bias: bool = False,
               trainable_temp: bool = True,
@@ -64,7 +67,9 @@ class SigLIPExperiment:
             temperature=temperature,
             relative_bias=relative_bias,
             trainable_temp=trainable_temp,
-            trainable_bias=trainable_bias
+            trainable_bias=trainable_bias,
+            relative_bias_parameterization=self.relative_bias_parameterization,
+            bias = bias
         ).to(self.device)
 
         params = [{'params': self.V, 'lr': lr},
@@ -103,6 +108,8 @@ class SigLIPExperiment:
             if (epoch + 1) % self.when_to_print == 0:
                 tb = criterion.get_temperature()
                 rb = criterion.get_bias()
+                if not self.relative_bias_parameterization:
+                    rb = rb / tb
                 if self.x is not None:
                     print(f"[{epoch+1}/{self.n_epochs}]  "
                           f"loss={loss:.4f}  δ={delta:.4f}  T={tb:.4f}  rb={rb:.4f}")
@@ -119,7 +126,7 @@ class SigLIPExperiment:
             V_ext = torch.cat([delta * self.V, -extra_col], dim=1)
             return U_ext, V_ext, criterion, losses, self.x
     
-    def plot_vectors(self, U, V, criterion, ax=None):
+    def plot_vectors(self, U, V, criterion, ax=None,plot_grid = False,title = None):
         """
         Plot the optimized vectors on a unit sphere.
         
@@ -154,17 +161,24 @@ class SigLIPExperiment:
                     [U_np[i, 2], V_np[i, 2]], 'k--', alpha=0.2)
         
         # Set labels and title
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
+        if plot_grid:
+            ax.set_xlabel('X', fontsize = 16)
+            ax.set_ylabel('Y', fontsize = 16)
+            ax.set_zlabel('Z', fontsize = 16)
         
         temp = criterion.get_temperature()
         relative_bias = criterion.get_bias()
-        title = f'rb={relative_bias:.2f}, T={temp:.2f}'
-        ax.set_title(title)
+        if title is None:
+            title = f'rb={relative_bias:.2f}, T={temp:.2f}'
+            ax.set_title(title, fontsize = 16)
+        else:
+            ax.set_title(title, fontsize = 16)
         
         ax.set_box_aspect([1, 1, 1])
-        
+        ax.grid(plot_grid)
+        ax.set_axis_off()
+        ax.legend(fontsize = 16)
+
         return ax
     def plot_inner_product_gap(self, U_final, V_final):
         inner_products = torch.matmul(U_final, V_final.t())
