@@ -15,19 +15,27 @@ class SigLIPLoss(nn.Module):
         trainable_temp (bool, optional): Whether to make temperature trainable. Defaults to True.
         trainable_bias (bool, optional): Whether to make realtive_bias is trainable. Defaults to True.
     """
-    def __init__(self, temperature=1.0, relative_bias=0.0, trainable_temp=True, trainable_bias=True):
+    def __init__(self, temperature=1.0, relative_bias=0.0, trainable_temp=True, trainable_bias=True, 
+                 bias = 0.0, relative_bias_parameterization = True):
         super().__init__()
         
+        self.relative_bias_parameterization = relative_bias_parameterization
         # Initialize temperature and bias as parameters if they should be trainable
         if trainable_temp:
             self.log_temperature = nn.Parameter(torch.log(torch.tensor(temperature, dtype=torch.float32)))
         else:
             self.log_temperature = torch.log(torch.tensor(temperature, dtype=torch.float32))
             
-        if trainable_bias:
-            self.relative_bias = nn.Parameter(torch.tensor(relative_bias, dtype=torch.float32))
+        if relative_bias_parameterization:
+            if trainable_bias:
+                self.relative_bias = nn.Parameter(torch.tensor(relative_bias, dtype=torch.float32))
+            else:
+                self.relative_bias = torch.tensor(relative_bias, dtype=torch.float32)
         else:
-            self.relative_bias = torch.tensor(relative_bias, dtype=torch.float32)
+            if trainable_bias:
+                self.bias = nn.Parameter(torch.tensor(bias, dtype=torch.float32))
+            else:
+                self.bias = torch.tensor(bias, dtype=torch.float32)
     
     def forward(self, u, v, labels=None):
         """
@@ -50,7 +58,10 @@ class SigLIPLoss(nn.Module):
         similarity = torch.matmul(u, v.t())
         
         # Apply temperature and bias
-        logits = similarity * torch.exp(self.log_temperature) - self.relative_bias * torch.exp(self.log_temperature)
+        if self.relative_bias_parameterization:
+            logits = similarity * torch.exp(self.log_temperature) - self.relative_bias * torch.exp(self.log_temperature)
+        else:
+            logits = similarity * torch.exp(self.log_temperature) - self.bias
         
         # If labels are not provided, assume diagonal pairs are positive
         if labels is None:
@@ -72,4 +83,7 @@ class SigLIPLoss(nn.Module):
     
     def get_bias(self):
         """Return the current bias value."""
-        return self.relative_bias.item() if isinstance(self.relative_bias, nn.Parameter) else self.relative_bias 
+        if self.relative_bias_parameterization:
+            return self.relative_bias.item() if isinstance(self.relative_bias, nn.Parameter) else self.relative_bias 
+        else:
+            return self.bias.item() if isinstance(self.bias, nn.Parameter) else self.bias
