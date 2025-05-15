@@ -109,8 +109,8 @@ class SigLIPExperiment:
             losses.append(loss.item())
 
             if self.return_t_b_history:
-                tb = criterion.get_temperature()
-                rb = criterion.get_bias()
+                tb = float(criterion.get_temperature())
+                rb = float(criterion.get_bias())
                 if not self.relative_bias_parameterization:
                     rb = rb / tb
                 relativebiases.append(rb)
@@ -138,7 +138,7 @@ class SigLIPExperiment:
                 return U_ext, V_ext, criterion, losses, self.x
         else:
             if self.x is None:
-                return self.U, self.V, criterion, losses, temperatures,relativebiases
+                return self.U, self.V, criterion, losses, temperatures, relativebiases
             else:
                 delta = torch.sigmoid(self.x)
                 extra = torch.sqrt(1 - delta**2)
