@@ -10,7 +10,7 @@ from mpl_toolkits.mplot3d import Axes3D
 
 class SigLIPExperiment:
     def __init__(self, n_classes=100, dim=3, n_epochs=int(5e4), device=None, when_to_print =100,
-                 relative_bias_parameterization = True):
+                 relative_bias_parameterization = True, return_t_b_history = False):
         self.n_classes = n_classes
         self.dim = dim
         self.n_epochs = n_epochs
@@ -19,6 +19,7 @@ class SigLIPExperiment:
         self.V = None
         self.when_to_print = when_to_print
         self.relative_bias_parameterization = relative_bias_parameterization
+        self.return_t_b_history = return_t_b_history
 
     def train(self,
               relative_bias: float = 0.0,
@@ -78,6 +79,8 @@ class SigLIPExperiment:
         optimizer = torch.optim.Adam(params)
 
         losses = []
+        relativebiases = []
+        temperatures = []
         for epoch in range(self.n_epochs):
             optimizer.zero_grad()
 
@@ -105,6 +108,13 @@ class SigLIPExperiment:
 
             losses.append(loss.item())
 
+            if self.return_t_b_history:
+                tb = criterion.get_temperature()
+                rb = criterion.get_bias()
+                if not self.relative_bias_parameterization:
+                    rb = rb / tb
+                relativebiases.append(rb)
+                temperatures.append(tb)
             if (epoch + 1) % self.when_to_print == 0:
                 tb = criterion.get_temperature()
                 rb = criterion.get_bias()
@@ -116,15 +126,26 @@ class SigLIPExperiment:
                 else:
                     print(f"[{epoch+1}/{self.n_epochs}]  "
                           f"loss={loss:.4f}  T={tb:.4f}  rb={rb:.4f}")
-        if self.x is None:
-            return self.U, self.V, criterion, losses
+        if not self.return_t_b_history:
+            if self.x is None:
+                return self.U, self.V, criterion, losses
+            else:
+                delta = torch.sigmoid(self.x)
+                extra = torch.sqrt(1 - delta**2)
+                extra_col = extra.expand(self.n_classes, 1)
+                U_ext = torch.cat([delta * self.U, extra_col], dim=1)
+                V_ext = torch.cat([delta * self.V, -extra_col], dim=1)
+                return U_ext, V_ext, criterion, losses, self.x
         else:
-            delta = torch.sigmoid(self.x)
-            extra = torch.sqrt(1 - delta**2)
-            extra_col = extra.expand(self.n_classes, 1)
-            U_ext = torch.cat([delta * self.U, extra_col], dim=1)
-            V_ext = torch.cat([delta * self.V, -extra_col], dim=1)
-            return U_ext, V_ext, criterion, losses, self.x
+            if self.x is None:
+                return self.U, self.V, criterion, losses, temperatures,relativebiases
+            else:
+                delta = torch.sigmoid(self.x)
+                extra = torch.sqrt(1 - delta**2)
+                extra_col = extra.expand(self.n_classes, 1)
+                U_ext = torch.cat([delta * self.U, extra_col], dim=1)
+                V_ext = torch.cat([delta * self.V, -extra_col], dim=1)
+                return U_ext, V_ext, criterion, losses, temperatures, relativebiases, self.x
     
     def plot_vectors(self, U, V, criterion, ax=None,plot_grid = False,title = None):
         """
