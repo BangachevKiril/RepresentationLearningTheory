@@ -73,8 +73,5 @@ class SigLIPLoss(nn.Module):
         return torch.exp(self.log_temperature)
     
     def get_bias(self):
-        """Return the current bias as a Tensor (0-dim)."""
-        # Ensure a Tensor is returned for consistency with get_temperature
-        if isinstance(self.relative_bias, torch.Tensor):
-            return self.relative_bias
-        return torch.tensor(self.relative_bias, dtype=torch.float32)
+        """Return the current bias value."""
+        return self.relative_bias.item() if isinstance(self.relative_bias, nn.Parameter) else self.relative_bias 
