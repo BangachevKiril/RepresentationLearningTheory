@@ -7,6 +7,7 @@ from siglip_loss import SigLIPLoss
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.mplot3d import Axes3D
+import pandas as pd
 
 class SigLIPExperiment:
     def __init__(self, n_classes=100, dim=3, n_epochs=int(5e4), device=None):
@@ -90,8 +91,8 @@ class SigLIPExperiment:
             losses.append(loss.item())
 
             if (epoch + 1) % 100 == 0:
-                tb = criterion.get_temperature()
-                rb = criterion.get_bias()
+                tb = criterion.get_temperature().item()
+                rb = criterion.get_bias().item()
                 if self.x is not None:
                     print(f"[{epoch+1}/{self.n_epochs}]  "
                           f"loss={loss:.4f}  δ={delta:.4f}  T={tb:.4f}  rb={rb:.4f}")
@@ -155,6 +156,105 @@ class SigLIPExperiment:
         ax.set_box_aspect([1, 1, 1])
         
         return ax
+    
+    def run_sweep(self, sweep_param, values, **train_kwargs):
+        results = []
+        self.all_UV = []  # reset storage for this sweep
+
+        for val in values:
+            print(f"\n=== Running {sweep_param}={val} ===")
+
+            train_args = {**train_kwargs, sweep_param: val}
+            train_out = self.train(**train_args)
+
+            if len(train_out) == 4:
+                U, V, criterion, losses = train_out
+            else:
+                U, V, criterion, losses, x = train_out
+
+            margin, min_match, max_non_match = self.calculate_margin(U, V)
+
+            results.append({
+                sweep_param: val,
+                "final_loss": losses[-1],
+                "final_temp": criterion.get_temperature().item(),
+                "final_bias": criterion.get_bias().item(),
+                "margin": margin,
+                "min_matching": min_match,
+                "max_non_matching": max_non_match,
+            })
+
+            # store U, V for later visualization
+            self.all_UV.append((U.detach().cpu(), V.detach().cpu()))
+
+        df = pd.DataFrame(results)
+        self.sweep_results = df
+        return df
+
+
+    def plot_losses(self, losses, title="Training Loss Curve"):
+        plt.figure(figsize=(8, 5))
+        plt.plot(losses, label="Loss")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.title(title)
+        plt.grid(True, alpha=0.3)
+        plt.legend()
+        plt.show()
+
+    def plot_final_metric_vs_param(self, param_name, metric_name):
+        """
+        Plot the relationship between a swept parameter and a final metric.
+
+        Args:
+            param_name (str): the swept parameter (must exist in self.sweep_results)
+            metric_name (str): the metric to plot (must exist in self.sweep_results)
+        """
+        if not hasattr(self, "sweep_results"):
+            raise ValueError("No sweep results found. Run run_sweep() first.")
+
+        df = self.sweep_results
+        plt.figure(figsize=(8, 5))
+        plt.plot(df[param_name], df[metric_name], "o-", linewidth=2)
+        plt.xlabel(param_name.capitalize())
+        plt.ylabel(metric_name.replace("_", " ").capitalize())
+        plt.title(f"{metric_name.replace('_', ' ').capitalize()} vs {param_name}")
+        plt.grid(True, alpha=0.3)
+        plt.show()
+
+    def plot_inner_product_gaps_across_sweep(self, all_U, all_V, sweep_param, values):
+        """
+        Plot inner product histograms for each sweep value side by side.
+
+        Args:
+            all_U, all_V: list of U and V tensors from multiple runs
+            sweep_param (str): the parameter that was swept
+            values (list): list of sweep values
+        """
+        n = len(values)
+        cols = min(4, n)
+        rows = int(np.ceil(n / cols))
+
+        fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 4 * rows))
+        axes = axes.flatten()
+
+        for i, (U, V, val) in enumerate(zip(all_U, all_V, values)):
+            plt.sca(axes[i])  # set current axis
+            inner_products = torch.matmul(U, V.t())
+
+            matching = torch.diag(inner_products).cpu().numpy()
+            mask = ~torch.eye(U.shape[0], dtype=bool, device=U.device)
+            non_matching = inner_products[mask].cpu().numpy()
+
+            plt.hist(matching, bins=15, alpha=0.5, label="Matching", color="blue", density=True)
+            plt.hist(non_matching, bins=15, alpha=0.5, label="Non-matching", color="green", density=True)
+
+            plt.title(f"{sweep_param}={val}")
+            plt.legend(fontsize=8)
+
+        plt.tight_layout()
+        plt.show()
+
     def plot_inner_product_gap(self, U_final, V_final):
         inner_products = torch.matmul(U_final, V_final.t())
 
@@ -260,14 +360,3 @@ class SigLIPExperiment:
         plt.savefig('siglip_similarities.png', dpi=300)
         plt.show()
         
-        # # Plot temperatures
-        # plt.figure(figsize=(12, 8))
-        # plt.plot(relative_biases, final_temps, 'o-', linewidth=2, color='purple', markersize=8)
-        # plt.xlabel('Relative Bias', fontsize=14)
-        # plt.ylabel('Final Temperature', fontsize=14)
-        # plt.title('Final Temperature vs Relative Bias', fontsize=16)
-        # plt.grid(True)
-        # plt.axvline(x=0, color='r', linestyle='--', alpha=0.5)
-        # plt.tight_layout()
-        # plt.savefig('siglip_temperatures.png', dpi=300)
-        # plt.show() 

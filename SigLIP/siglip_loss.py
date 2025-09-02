@@ -18,17 +18,19 @@ class SigLIPLoss(nn.Module):
     def __init__(self, temperature=1.0, relative_bias=0.0, trainable_temp=True, trainable_bias=True):
         super().__init__()
         
-        # Initialize temperature and bias as parameters if they should be trainable
+        # Initialize temperature and bias as parameters or buffers
+        log_temp = torch.log(torch.tensor(temperature, dtype=torch.float32))
+        rel_bias = torch.tensor(relative_bias, dtype=torch.float32)
+        
         if trainable_temp:
-            self.log_temperature = nn.Parameter(torch.log(torch.tensor(temperature, dtype=torch.float32)))
+            self.log_temperature = nn.Parameter(log_temp)
         else:
-            self.log_temperature = torch.log(torch.tensor(temperature, dtype=torch.float32))
+            self.register_buffer('log_temperature', log_temp)
             
         if trainable_bias:
-            self.relative_bias = nn.Parameter(torch.tensor(relative_bias, dtype=torch.float32))
+            self.relative_bias = nn.Parameter(rel_bias)
         else:
-            self.relative_bias = torch.tensor(relative_bias, dtype=torch.float32)
-    
+            self.register_buffer('relative_bias', rel_bias)
     def forward(self, u, v, labels=None):
         """
         Compute the SigLIP loss.
@@ -71,5 +73,8 @@ class SigLIPLoss(nn.Module):
         return torch.exp(self.log_temperature)
     
     def get_bias(self):
-        """Return the current bias value."""
-        return self.relative_bias.item() if isinstance(self.relative_bias, nn.Parameter) else self.relative_bias 
+        """Return the current bias as a Tensor (0-dim)."""
+        # Ensure a Tensor is returned for consistency with get_temperature
+        if isinstance(self.relative_bias, torch.Tensor):
+            return self.relative_bias
+        return torch.tensor(self.relative_bias, dtype=torch.float32)
