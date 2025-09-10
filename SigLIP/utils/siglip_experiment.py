@@ -19,13 +19,14 @@ from .plottingutils import (
 )
 
 class SigLIPExperiment:
-    def __init__(self, n_classes=100, dim=3, n_epochs=int(5e4), device=None):
+    def __init__(self, n_classes=100, dim=3, n_epochs=int(5e4), device=None, when_to_print=100000):
         self.n_classes = n_classes
         self.dim = dim
         self.n_epochs = n_epochs
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         self.U = None
         self.V = None
+        self.when_to_print = when_to_print
 
     def train(self,
               relative_bias: float,
@@ -99,7 +100,7 @@ class SigLIPExperiment:
 
             losses.append(loss.item())
 
-            if (epoch + 1) % 100 == 0:
+            if (epoch + 1) % self.when_to_print == 0:
                 tb = criterion.get_temperature().item()
                 rb = criterion.get_bias().item()
                 if self.x is not None:
