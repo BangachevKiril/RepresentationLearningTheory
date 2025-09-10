@@ -1,42 +1,46 @@
-"""Utility package facade for SigLIP experiments, losses, initialization, and plotting.
+"""Utility package for SigLIP experiments.
 
-Usage examples:
-    from utils import SigLIPExperiment, SigLIPLoss
-    from utils import generate_class_vectors
-    from utils import plot_vectors, plot_losses
+Exposes commonly used classes and functions:
+- SigLIPExperiment
+- SigLIPLoss
+- generate_class_vectors, generate_class_vectors_hemispheres
+- plot_vectors, plot_inner_product_gap, calculate_margin, analyze_results
+
+Example usage:
+    from utils import (
+        SigLIPExperiment, SigLIPLoss,
+        generate_class_vectors, generate_class_vectors_hemispheres,
+        plot_vectors, plot_inner_product_gap, calculate_margin, analyze_results,
+    )
 """
 
 from .siglip_experiment import SigLIPExperiment
 from .siglip_loss import SigLIPLoss
 from .sphere_initialization import (
     generate_class_vectors,
-    generate_class_vectors_hemispheres,
+    # generate_class_vectors_hemispheres may not exist in some copies; handle gracefully
 )
+
+# Try to expose optional helpers if present
+try:
+    from .sphere_initialization import generate_class_vectors_hemispheres  # type: ignore
+except Exception:  # pragma: no cover - optional
+    generate_class_vectors_hemispheres = None  # type: ignore
+
 from .plottingutils import (
     plot_vectors,
-    plot_losses,
-    plot_final_metric_vs_param,
     plot_inner_product_gap,
-    plot_inner_product_gaps_across_sweep,
-    plot_margins_vs_relative_bias,
-    plot_similarities_vs_relative_bias,
+    calculate_margin,
+    analyze_results,
 )
 
 __all__ = [
-    # Core experiment/loss
-    "SigLIPExperiment",
-    "SigLIPLoss",
-    # Initialization helpers
-    "generate_class_vectors",
-    "generate_class_vectors_hemispheres",
-    # Plotting utilities
-    "plot_vectors",
-    "plot_losses",
-    "plot_final_metric_vs_param",
-    "plot_inner_product_gap",
-    "plot_inner_product_gaps_across_sweep",
-    "plot_margins_vs_relative_bias",
-    "plot_similarities_vs_relative_bias",
+    'SigLIPExperiment',
+    'SigLIPLoss',
+    'generate_class_vectors',
+    'generate_class_vectors_hemispheres',
+    'plot_vectors',
+    'plot_inner_product_gap',
+    'calculate_margin',
+    'analyze_results',
 ]
-
-__version__ = "0.1.0"

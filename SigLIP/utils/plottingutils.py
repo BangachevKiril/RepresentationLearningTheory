@@ -1,295 +1,178 @@
-import torch
 import numpy as np
+import torch
 import matplotlib.pyplot as plt
-from typing import Iterable, Optional, Tuple
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 - ensures 3D projection is registered
 
 
-def _ensure_ax(ax=None, projection: Optional[str] = None):
-    if ax is not None:
-        return ax
-    if projection:
-        fig = plt.figure(figsize=(10, 10))
-        return fig.add_subplot(111, projection=projection)
-    fig, ax = plt.subplots(figsize=(8, 5))
-    return ax
-
-
-def _title_from_params(criterion=None, temperature=None, relative_bias=None, fallback: Optional[str] = None) -> Optional[str]:
-    t = None
-    rb = None
-    if criterion is not None:
-        # Accept objects that expose get_temperature/get_bias
-        try:
-            t = float(getattr(criterion, "get_temperature")())
-        except Exception:
-            pass
-        try:
-            rb = float(getattr(criterion, "get_bias")())
-        except Exception:
-            pass
-    if temperature is not None:
-        t = float(temperature)
-    if relative_bias is not None:
-        rb = float(relative_bias)
-
-    if t is not None and rb is not None:
-        return f"rb={rb:.2f}, T={t:.2f}"
-    return fallback
-
-
-def plot_vectors(
-    U: torch.Tensor,
-    V: torch.Tensor,
-    *,
-    criterion=None,
-    temperature: Optional[float] = None,
-    relative_bias: Optional[float] = None,
-    title: Optional[str] = None,
-    ax=None,
-    indices: Tuple[int, int, int] = (0, 1, 2),
-    show_sphere: bool = True,
-    connect_pairs: bool = True,
-    u_color: str = "blue",
-    v_color: str = "red",
-    s: int = 20,
-):
-    """3D plot of U and V vectors on the unit sphere.
-
-    Uses the first three (or provided indices) coordinates for visualization.
+def plot_vectors(U: torch.Tensor,
+                 V: torch.Tensor,
+                 criterion,
+                 ax=None,
+                 plot_grid: bool = False,
+                 title: str | None = None):
     """
-    if U.ndim != 2 or V.ndim != 2:
-        raise ValueError("U and V must be 2D tensors of shape (n, d)")
-    if U.size(1) <= max(indices) or V.size(1) <= max(indices):
-        raise ValueError(
-            f"U/V must have at least {max(indices)+1} dims; got {U.size(1)} and {V.size(1)}"
-        )
+    Plot the optimized vectors on a unit sphere (expects dim=3).
 
-    ax = _ensure_ax(ax, projection="3d")
+    Args:
+        U: Tensor [n, 3]
+        V: Tensor [n, 3]
+        criterion: Loss object that provides get_temperature() and get_bias()
+        ax: Optional matplotlib 3D axes
+        plot_grid: Whether to show axis grid/labels
+        title: Optional figure title; if None, uses rb/T from criterion
+    """
+    if U.ndim != 2 or V.ndim != 2 or U.shape[1] != 3 or V.shape[1] != 3:
+        raise ValueError("plot_vectors expects U and V with shape [n, 3]")
+
+    if ax is None:
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_subplot(111, projection='3d')
 
     U_np = U.detach().cpu().numpy()
     V_np = V.detach().cpu().numpy()
+    n = U_np.shape[0]
 
-    if show_sphere:
-        u = np.linspace(0, 2 * np.pi, 30)
-        v = np.linspace(0, np.pi, 30)
-        x = np.outer(np.cos(u), np.sin(v))
-        y = np.outer(np.sin(u), np.sin(v))
-        z = np.outer(np.ones(np.size(u)), np.cos(v))
-        ax.plot_wireframe(x, y, z, color="gray", alpha=0.1)
+    # Wireframe sphere
+    u = np.linspace(0, 2 * np.pi, 30)
+    v = np.linspace(0, np.pi, 30)
+    x = np.outer(np.cos(u), np.sin(v))
+    y = np.outer(np.sin(u), np.sin(v))
+    z = np.outer(np.ones(np.size(u)), np.cos(v))
+    ax.plot_wireframe(x, y, z, color='gray', alpha=0.1)
 
-    i, j, k = indices
-    ax.scatter(U_np[:, i], U_np[:, j], U_np[:, k], c=u_color, s=s, label="U vectors")
-    ax.scatter(V_np[:, i], V_np[:, j], V_np[:, k], c=v_color, s=s, label="V vectors")
+    # Points
+    ax.scatter(U_np[:, 0], U_np[:, 1], U_np[:, 2], c='blue', s=20, label='U vectors')
+    ax.scatter(V_np[:, 0], V_np[:, 1], V_np[:, 2], c='red', s=20, label='V vectors')
 
-    if connect_pairs:
-        for r in range(U_np.shape[0]):
-            ax.plot(
-                [U_np[r, i], V_np[r, i]],
-                [U_np[r, j], V_np[r, j]],
-                [U_np[r, k], V_np[r, k]],
-                "k--",
-                alpha=0.2,
-            )
+    # Lines between pairs
+    for i in range(n):
+        ax.plot([U_np[i, 0], V_np[i, 0]],
+                [U_np[i, 1], V_np[i, 1]],
+                [U_np[i, 2], V_np[i, 2]], 'k--', alpha=0.2)
 
-    ax.set_xlabel("X")
-    ax.set_ylabel("Y")
-    ax.set_zlabel("Z")
+    # Labels/title
+    if plot_grid:
+        ax.set_xlabel('X', fontsize=16)
+        ax.set_ylabel('Y', fontsize=16)
+        ax.set_zlabel('Z', fontsize=16)
 
-    auto_title = _title_from_params(criterion, temperature, relative_bias, title)
-    if auto_title:
-        ax.set_title(auto_title)
+    temp = criterion.get_temperature()
+    relative_bias = criterion.get_bias()
+    if title is None:
+        title = f'rb={relative_bias:.2f}, T={temp:.2f}'
+    ax.set_title(title, fontsize=16)
 
     ax.set_box_aspect([1, 1, 1])
+    ax.grid(plot_grid)
+    ax.set_axis_off()
+    ax.legend(fontsize=16)
+
     return ax
 
 
-def plot_losses(
-    losses: Iterable[float],
-    *,
-    ax=None,
-    title: str = "Training Loss Curve",
-    xlabel: str = "Epoch",
-    ylabel: str = "Loss",
-    label: str = "Loss",
-    grid: bool = True,
-    logy: bool = False,
-    savepath: Optional[str] = None,
-):
-    ax = _ensure_ax(ax)
-    ax.plot(list(losses), label=label)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
-    if grid:
-        ax.grid(True, alpha=0.3)
-    if logy:
-        ax.set_yscale("log")
-    if label:
-        ax.legend()
-    if savepath:
-        ax.figure.savefig(savepath, dpi=300)
-    return ax
+def plot_inner_product_gap(U_final: torch.Tensor,
+                           V_final: torch.Tensor,
+                           bins: int = 15,
+                           log: bool = True):
+    """
+    Plot histograms for matching vs non-matching inner products.
+    """
+    if U_final.ndim != 2 or V_final.ndim != 2 or U_final.shape != V_final.shape:
+        raise ValueError("U_final and V_final must be 2D tensors with same shape [n, d]")
 
+    n_classes = U_final.shape[0]
+    device = U_final.device
 
-def plot_final_metric_vs_param(
-    df,
-    param_name: str,
-    metric_name: str,
-    *,
-    ax=None,
-    style: str = "o-",
-    linewidth: int = 2,
-    xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None,
-    title: Optional[str] = None,
-    grid: bool = True,
-):
-    ax = _ensure_ax(ax)
-    ax.plot(df[param_name], df[metric_name], style, linewidth=linewidth)
-    ax.set_xlabel(xlabel or param_name.capitalize())
-    pretty_metric = metric_name.replace("_", " ").capitalize()
-    ax.set_ylabel(ylabel or pretty_metric)
-    ax.set_title(title or f"{pretty_metric} vs {param_name}")
-    if grid:
-        ax.grid(True, alpha=0.3)
-    return ax
-
-
-def plot_inner_product_gaps_across_sweep(
-    all_U: Iterable[torch.Tensor],
-    all_V: Iterable[torch.Tensor],
-    sweep_param: str,
-    values: Iterable,
-    *,
-    bins: int = 15,
-    density: bool = True,
-    log: bool = False,
-    cols: int = 4,
-    figsize: Optional[Tuple[int, int]] = None,
-    sharex: bool = False,
-    sharey: bool = False,
-):
-    all_U = list(all_U)
-    all_V = list(all_V)
-    values = list(values)
-    n = len(values)
-    cols = min(cols, n) if n > 0 else cols
-    rows = int(np.ceil(n / cols)) if n > 0 else 1
-    if figsize is None:
-        figsize = (5 * cols, 4 * rows)
-
-    fig, axes = plt.subplots(rows, cols, figsize=figsize, sharex=sharex, sharey=sharey)
-    axes = np.atleast_1d(axes).flatten()
-
-    for i, (U, V, val) in enumerate(zip(all_U, all_V, values)):
-        ax = axes[i]
-        inner_products = torch.matmul(U, V.t())
-
-        matching = torch.diag(inner_products).detach().cpu().numpy()
-        mask = ~torch.eye(U.shape[0], dtype=bool, device=U.device)
-        non_matching = inner_products[mask].detach().cpu().numpy()
-
-        ax.hist(matching, bins=bins, alpha=0.5, label="Matching", color="blue", density=density, log=log)
-        ax.hist(non_matching, bins=bins, alpha=0.5, label="Non-matching", color="green", density=density, log=log)
-
-        ax.set_title(f"{sweep_param}={val}")
-        ax.legend(fontsize=8)
-
-    # Hide any unused axes
-    for j in range(i + 1, len(axes)):
-        axes[j].axis("off")
-
-    plt.tight_layout()
-    return fig, axes
-
-
-def plot_inner_product_gap(
-    U: torch.Tensor,
-    V: torch.Tensor,
-    *,
-    bins: int = 15,
-    density: bool = True,
-    log: bool = True,
-    ax=None,
-    title: str = "Distribution of Inner Products (Normalized)",
-    show_sep: bool = True,
-    colors: Tuple[str, str] = ("blue", "green"),
-):
-    ax = _ensure_ax(ax)
-
-    inner_products = torch.matmul(U, V.t())
+    inner_products = torch.matmul(U_final, V_final.t())
     matching_pairs = torch.diag(inner_products).detach().cpu().numpy()
-    mask = ~torch.eye(U.shape[0], dtype=bool, device=U.device)
+
+    mask = ~torch.eye(n_classes, dtype=torch.bool, device=device)
     non_matching_pairs = inner_products[mask].detach().cpu().numpy()
 
-    ax.hist(matching_pairs, bins=bins, alpha=0.5, label="Matching pairs (U_i, V_i)", color=colors[0], density=density, log=log)
-    ax.hist(non_matching_pairs, bins=bins, alpha=0.5, label="Non-matching pairs (U_i, V_j)", color=colors[1], density=density, log=log)
+    plt.figure(figsize=(10, 6))
+    plt.hist(matching_pairs, bins=bins, alpha=0.5, label='Matching pairs (U_i, V_i)',
+             color='blue', density=True, log=log)
+    plt.hist(non_matching_pairs, bins=bins, alpha=0.5, label='Non-matching pairs (U_i, V_j)',
+             color='red', density=True, log=log)
 
-    min_matching = float(np.min(matching_pairs))
-    max_non_matching = float(np.max(non_matching_pairs))
-    midpoint = (min_matching + max_non_matching) / 2.0
-    if show_sep:
-        ax.axvline(x=midpoint, color="red", linestyle="--", label="Separation Point")
+    min_matching = np.min(matching_pairs)
+    max_non_matching = np.max(non_matching_pairs)
+    midpoint = (min_matching + max_non_matching) / 2
+    plt.axvline(x=midpoint, color='red', linestyle='--', label='Separation Point')
 
-    ax.set_xlabel("Inner Product Value")
-    ax.set_ylabel("Density")
-    ax.set_title(title)
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-
-    return {"min_matching": min_matching, "max_non_matching": max_non_matching, "midpoint": midpoint, "ax": ax}
-
-
-def plot_margins_vs_relative_bias(
-    relative_biases: Iterable[float],
-    margins: Iterable[float],
-    *,
-    ax=None,
-    title: str = "Margin Between Matching and Non-matching Pairs",
-    xlabel: str = "Relative Bias",
-    ylabel: str = "Margin",
-    grid: bool = True,
-    savepath: Optional[str] = "siglip_margins.png",
-):
-    ax = _ensure_ax(ax)
-    ax.plot(list(relative_biases), list(margins), "o-", linewidth=2, color="green", markersize=8)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
-    if grid:
-        ax.grid(True)
-    if savepath:
-        ax.figure.savefig(savepath, dpi=300)
-    return ax
+    plt.xlabel('Inner Product Value', fontsize=16)
+    plt.ylabel('Density', fontsize=16)
+    plt.title('Distribution of Inner Products (Normalized)', fontsize=20)
+    plt.legend(fontsize=16)
+    plt.grid(True, alpha=0.3)
+    plt.show()
 
 
-def plot_similarities_vs_relative_bias(
-    relative_biases: Iterable[float],
-    min_matching_sims: Iterable[float],
-    max_non_matching_sims: Iterable[float],
-    *,
-    ax=None,
-    title: str = "Similarity Values and Margins",
-    xlabel: str = "Relative Bias",
-    ylabel: str = "Cosine Similarity",
-    fill_between: bool = True,
-    grid: bool = True,
-    savepath: Optional[str] = "siglip_similarities.png",
-):
-    ax = _ensure_ax(ax)
-    rb = list(relative_biases)
-    min_s = list(min_matching_sims)
-    max_s = list(max_non_matching_sims)
-    ax.plot(rb, min_s, "o-", linewidth=2, label="Min Matching Similarity", markersize=6)
-    ax.plot(rb, max_s, "o-", linewidth=2, label="Max Non-matching Similarity", markersize=6)
-    if fill_between:
-        ax.fill_between(rb, min_s, max_s, alpha=0.2, color="green", label="Margin")
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
-    ax.legend(fontsize=12)
-    if grid:
-        ax.grid(True)
-    if savepath:
-        ax.figure.savefig(savepath, dpi=300)
-    return ax
+def calculate_margin(U: torch.Tensor, V: torch.Tensor):
+    """
+    Calculate the margin between matching and non-matching pairs.
+
+    Returns:
+        tuple: (margin, min_matching_sim, max_non_matching_sim)
+    """
+    cosine_sim = torch.matmul(U, V.t())
+
+    diag_indices = torch.arange(U.shape[0], device=U.device)
+    matching_sims = cosine_sim[diag_indices, diag_indices]
+    min_matching_sim = torch.min(matching_sims).item()
+
+    mask = torch.ones_like(cosine_sim, dtype=torch.bool)
+    mask[diag_indices, diag_indices] = False
+
+    non_matching_sims = cosine_sim[mask]
+    max_non_matching_sim = torch.max(non_matching_sims).item()
+
+    margin = (min_matching_sim - max_non_matching_sim) / 2
+
+    return margin, min_matching_sim, max_non_matching_sim
+
+
+def analyze_results(all_results, relative_biases):
+    """
+    Analyze and plot results from multiple experiments.
+
+    Args:
+        all_results (list): List of (U, V, criterion, losses) tuples
+        relative_biases (list): List of relative bias values used
+    """
+    margins = []
+    min_matching_sims = []
+    max_non_matching_sims = []
+    final_temps = []
+
+    for U, V, criterion, _ in all_results:
+        margin, min_match, max_non_match = calculate_margin(U, V)
+        margins.append(margin)
+        min_matching_sims.append(min_match)
+        max_non_matching_sims.append(max_non_match)
+        final_temps.append(criterion.get_temperature())
+
+    # Plot margins
+    plt.figure(figsize=(12, 8))
+    plt.plot(relative_biases, margins, 'o-', linewidth=2, color='green', markersize=8)
+    plt.xlabel('Relative Bias', fontsize=14)
+    plt.ylabel('Margin', fontsize=14)
+    plt.title('Margin Between Matching and Non-matching Pairs', fontsize=16)
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig('siglip_margins.png', dpi=300)
+    plt.show()
+
+    # Plot similarity values
+    plt.figure(figsize=(12, 8))
+    plt.plot(relative_biases, min_matching_sims, 'o-', linewidth=2, label='Min Matching Similarity', markersize=6)
+    plt.plot(relative_biases, max_non_matching_sims, 'o-', linewidth=2, label='Max Non-matching Similarity', markersize=6)
+    plt.fill_between(relative_biases, min_matching_sims, max_non_matching_sims, alpha=0.2, color='green', label='Margin')
+    plt.xlabel('Relative Bias', fontsize=14)
+    plt.ylabel('Cosine Similarity', fontsize=14)
+    plt.title('Similarity Values and Margins', fontsize=16)
+    plt.legend(fontsize=12)
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig('siglip_similarities.png', dpi=300)
+    plt.show()
