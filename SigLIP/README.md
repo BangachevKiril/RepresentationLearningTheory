@@ -4,9 +4,7 @@ This directory contains the experiment code accompanying the paper:
 
 Global Minimizers of Sigmoid Contrastive Loss (Bangachev, Noman, Bresler, Polyanskiy, 2025).
 
-We study the (multi‑modal) sigmoid contrastive loss with *trainable inverse temperature* and *bias / relative bias* parameters. Our results characterize global minimizers, geometric constellation structure, modality gap, and optimization behavior under different parameterizations (absolute bias vs relative bias) and constraints (frozen modalities, adapters, multiple modalities, fixed vs trainable temperature, etc.). Throughout, $T$ denotes inverse temperature, $r_b$ the relative bias, and $b$ an absolute bias when that parameterization is used.
-
-Core prior art: SigLIP (Google DeepMind, 2023), SigLIP2 (2025) and theoretical analysis of fixed‑temp sigmoid loss (Lee et al., 2024). We extend theory to the practically used trainable-parameter setting and validate with controlled synthetic experiments plus pretrained model embeddings.
+We study the sigmoid contrastive loss with *trainable inverse temperature* and *bias / relative bias* parameters. Our results characterize global minimizers, geometric constellation structure, modality gap, and optimization behavior under different parameterizations (absolute bias vs relative bias) and constraints (frozen modalities, adapters, multiple modalities, fixed vs trainable temperature, etc.). Throughout, $t$ denotes inverse temperature, $r_b$ the relative bias, and $b$ an absolute bias when that parameterization is used.
 
 ---
 ### Repository Layout
@@ -30,16 +28,16 @@ Let $U_i, V_i \in \mathbb{S}^{d-1}$ denote paired embeddings across two modaliti
 $$s_{ij} = \langle U_i, V_j \rangle.$$
 The SigLIP objective treats matching vs non‑matching pairs as a binary classification problem with sigmoid logits. Using the relative bias parameterization (our preferred form) the (per‑batch) loss is
 
-$$\mathcal{L} = - \sum_{i,j} \Big[ y_{ij} \log \sigma\big( T ( s_{ij} - r_b ) \big) + (1-y_{ij}) \log \big( 1 - \sigma\big( T ( s_{ij} - r_b ) \big) \big) \Big],$$
+$$\mathcal{L} = - \sum_{i,j} \Big[ y_{ij} \log \sigma\big( t ( s_{ij} - r_b ) \big) + (1-y_{ij}) \log \big( 1 - \sigma\big( t ( s_{ij} - r_b ) \big) \big) \Big],$$
 
 where $y_{ij}=1$ iff $i=j$ (positive pair) and $0$ otherwise. We often normalize by $n^2$; the constant factor is omitted here.
 
 Parameterizations:
 
-* (Relative bias) logits: $\; T( s_{ij} - r_b)$ with trainable $T>0$ and $r_b\in \mathbb{R}$.
-* (Absolute bias) logits: $\; T s_{ij} - b$ with trainable $T>0,\; b\in \mathbb{R}$.
+* (Relative bias) logits: $\; t( s_{ij} - r_b)$ with trainable $t>0$ and $r_b\in \mathbb{R}$.
+* (Absolute bias) logits: $\; t s_{ij} - b$ with trainable $t>0,\; b\in \mathbb{R}$.
 
-They are related by $b = T\, r_b$. Directly optimizing $r_b$ avoids the coupling that can drive $b/T \to 0$ empirically.
+They are related by $b = t\, r_b$. Directly optimizing $r_b$ avoids the coupling that can drive $b/t \to 0$ empirically.
 
 Margin (reported in figures) between matching and non‑matching similarities:
 
@@ -51,19 +49,12 @@ $$\widetilde U_i = (\delta U_i, \sqrt{1-\delta^2}), \qquad \widetilde V_i = (\de
 
 preserving unit norm while controlling alignment strength via $\delta$.
 
-Geometric Predictions (validated here):
-1. Constellation Structure: At optimum, matched pairs align with elevated cosine similarity while non‑matches remain bounded away, producing a margin that scales with $T$ and $r_b$.
-2. Modality Gap: Learned embeddings of different modalities occupy shifted “caps” on the sphere when bias / relative bias adjusts the separating hyperplane.
-3. Scaling Laws: Trainable $T$ grows to enlarge margins; with absolute bias, $b/T \to 0$ (degenerate relative bias), while direct $r_b$ parameterization keeps $r_b$ stable.
-4. Multi‑Modal Extension: For $M$ modalities, optimal geometry forms $M$ interleaved constellations with controlled pairwise angular separation depending on a common $(T, r_b)$.
-5. Frozen / Adapter Setting: Freezing one modality and learning the other + $(T, r_b)$ (optionally a low‑rank adapter scalar $\delta$) still attains separation predicted by theory; $\delta$ interpolates between alignment strength and orthogonal augmentation.
-
 ---
 ### Provided Utilities
 
 `utils/siglip_loss.py`
 	Implements SigLIPLoss with choices:
-	- trainable_temp (log‑parameterized) → exp(log_T)
+	- trainable_temp (log‑parameterized) → exp(log_t)
 	- relative_bias_parameterization flag: if True learns rb directly; else learns absolute b
 	- numerically stable per‑pair binary cross entropy with sigmoid
 
@@ -85,28 +76,28 @@ Geometric Predictions (validated here):
 ### Experiment Notebooks (Synthetic)
 
 1. `BasicExperiment.ipynb`
-		- Two modalities $(U,V)$, $d=3$ for visualization, trainable $T$, (optionally) trainable $r_b$.
-	 - Demonstrates emergence of a clear separation and growth of T; produces Figure 5 (constellation + loss curves + inner-product separation histogram).
+		- Two modalities $(U,V)$, $d=3$ for visualization, trainable $t$, (optionally) trainable $r_b$.
+	 	- Demonstrates emergence of a clear separation and growth of t; produces Figure 5 (constellation + loss curves + inner-product separation histogram).
 
 2. `MoreModalities.ipynb`
-		- Extends to $M \in \{4,6,8,10\}$ modalities. Joint optimization of all modality embeddings with shared $(T, r_b)$.
+		- Extends to $M \in \{4,6,8,10\}$ modalities. Joint optimization of all modality embeddings with shared $(t, r_b)$.
 		- Compares trainable vs fixed large temperature (ablation). Generates multi‑panel constellations and margin statistics (Figure 8 style) plus loss comparison (`multiplemodalities_loss_comparison.png`).
 
 3. `FrozenModalityExperiments.ipynb`
-		- Freezes one modality ($U$) to simulate using a locked pretrained encoder while training $V$ and $(T, r_b)$.
+		- Freezes one modality ($U$) to simulate using a locked pretrained encoder while training $V$ and $(t, r_b)$.
 		- Optional adapter scalar $\delta$ (through an extended embedding dimension) to interpolate geometry; logs $\delta$ and demonstrates maintained margin.
 	 - Produces figures `frozen_loss_comparison_.png`, `frozenmodalities_ip_separation_.png` etc.
 
 4. `AblationStudy.ipynb`
 		- Systematically varies initial relative bias values and whether temperature is trainable vs fixed large value.
-		- Shows how fixing $T$ alters attainable margin and slows convergence (`ablationfixedlargetemperature.png`, `ablationtrainablelargetemperature.png`).
+		- Shows how fixing $t$ alters attainable margin and slows convergence (`ablationfixedlargetemperature.png`, `ablationtrainablelargetemperature.png`).
 
 5. `BiasParamLeadsToZeroRB.ipynb`
 		- Compares absolute bias parameterization vs relative bias parameterization.
-		- Empirically shows $b/T \to 0$ when learning absolute bias, validating preference for direct $r_b$ parameterization (Appendix E.4). Figures: `bisavsrelativebias_evolution.png`, `bisavsrelativebias_losses.png`, `bisavsrelativebias_margins.png`.
+		- Empirically shows $b/t \to 0$ when learning absolute bias, validating preference for direct $r_b$ parameterization (Appendix E.4). Figures: `bisavsrelativebias_evolution.png`, `bisavsrelativebias_losses.png`, `bisavsrelativebias_margins.png`.
 
 6. `FixedRelativeBias.ipynb`
-		- Trains embeddings with $r_b$ fixed (not trainable) while $T$ is trainable (or vice‑versa in variants) to isolate influence of $r_b$ on margin and geometry.
+		- Trains embeddings with $r_b$ fixed (not trainable) while $t$ is trainable (or vice‑versa in variants) to isolate influence of $r_b$ on margin and geometry.
 
 ---
 ### Pretrained Model Embedding Study
@@ -178,7 +169,7 @@ U_ext,V_ext,crit,losses,temps,rb_hist,x = exp.train(fixed_U=U_fixed, explicit_ad
 * Random initialization on the sphere → run seeds if you need variance estimates.
 * Projection step (renormalization) maintains spherical constraint each iteration.
 * Learning rate defaults ($1\times 10^{-2}$) chosen for stability with Adam; adjust for higher dimensions.
-* Numerical stability: small $10^{-8}$ term inside $\log$ for BCE; for extreme $T$ growth consider gradient clipping.
+* Numerical stability: small $10^{-8}$ term inside $\log$ for BCE; for extreme $t$ growth consider gradient clipping.
 
 ---
 ### Extending to More Modalities
@@ -187,9 +178,9 @@ The `MoreModalities.ipynb` notebook shows a pattern: maintain a list of modality
 ---
 ### Key Empirical Takeaways
 1. Relative bias parameterization stabilizes optimization and preserves a non‑vanishing $r_b$.
-2. Trainable temperature is crucial for achieving large margins; fixing $T$ bottlenecks separation.
+2. Trainable temperature is crucial for achieving large margins; fixing $t$ bottlenecks separation.
 3. Adapter scalar $\delta$ in frozen modality setting offers a controlled degree of geometric coupling.
-4. Multi‑modal extension exhibits predictable widening of non‑match similarity spread but preserves margin scaling with $T$.
+4. Multi‑modal extension exhibits predictable widening of non‑match similarity spread but preserves margin scaling with $t$.
 5. Pretrained SigLIP embeddings qualitatively match theoretical constellation + modality gap predictions.
 
 ---
