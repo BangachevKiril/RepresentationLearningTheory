@@ -15,7 +15,7 @@ from .plottingutils import (
 )
 
 class SigLIPExperiment:
-    def __init__(self, n_classes=100, dim=3, n_epochs=int(5e4), device=None, when_to_print =100,
+    def __init__(self, n_classes=100, dim=3, n_epochs=int(5e4), device=None, when_to_print =100000,
                  relative_bias_parameterization = True, return_t_b_history = False):
         self.n_classes = n_classes
         self.dim = dim
