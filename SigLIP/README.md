@@ -26,14 +26,33 @@ SigLIP/
 ---
 ### Conceptual Overview
 
-Let U_i, V_i ∈ S^{d-1} denote paired embeddings across two modalities (can extend to M>2). For a similarity s_{ij} = ⟨U_i, V_j⟩ the SigLIP objective uses a *sigmoid classification* view instead of softmax:
+Let $U_i, V_i \in \mathbb{S}^{d-1}$ denote paired embeddings across two modalities (extendable to $M>2$ modalities). Define pairwise similarities
+$$
+s_{ij} = \langle U_i, V_j \rangle.
+$$
+The SigLIP objective treats matching vs non‑matching pairs as a binary classification problem with sigmoid logits. Using the relative bias parameterization (our preferred form) the (per‑batch) loss is
+$$
+\mathcal{L} = - \sum_{i,j} \Big[ y_{ij} \log \sigma\!\big( T ( s_{ij} - r_b ) \big) + (1-y_{ij}) \log \big( 1 - \sigma\!\big( T ( s_{ij} - r_b ) \big) \big) \Big],
+$$
+where $y_{ij}=1$ iff $i=j$ (positive pair) and $0$ otherwise. We often normalize by $n^2$; the constant factor is omitted here.
 
-	L = - E[ y_{ij} log σ( T (s_{ij} - rb) ) + (1 - y_{ij}) log (1 - σ( T (s_{ij} - rb) )) ]
+Parameterizations:
 
-where:
-* T > 0 is a (trainable) inverse temperature.
-* rb is the (trainable) relative bias (our parameterization) OR an absolute bias b (original parameterization). In the absolute bias view logits = T s_{ij} - b; in the relative-bias view logits = T ( s_{ij} - rb ). The transformation b = T * rb couples parameters; decoupling via rb improves conditioning and optimization stability.
-* y_{ij}=1 only for matching class pairs (i=j); 0 otherwise (full pairwise matrix supervision in a batch).
+* (Relative bias) logits: $\; T( s_{ij} - r_b)$ with trainable $T>0$ and $r_b\in \mathbb{R}$.
+* (Absolute bias) logits: $\; T s_{ij} - b$ with trainable $T>0, b\in \mathbb{R}$.
+
+They are related by $b = T\, r_b$. Directly optimizing $r_b$ avoids the coupling that can drive $b/T \to 0$ empirically.
+
+Margin (reported in figures) between matching and non‑matching similarities:
+$$
+\mathrm{margin} = \frac{ \min_i s_{ii} - \max_{i\neq j} s_{ij} }{2}.
+$$
+
+In frozen‑modality + adapter experiments we introduce an interpolation scalar $\delta = \sigma(x)$ and extend dimensionality so effective paired vectors become
+$$
+\widetilde U_i = (\delta U_i, \sqrt{1-\delta^2}), \qquad \widetilde V_i = (\delta V_i, -\sqrt{1-\delta^2}),
+$$
+preserving unit norm while controlling alignment strength via $\delta$.
 
 Geometric Predictions (validated here):
 1. Constellation Structure: At optimum, matched pairs align with elevated cosine similarity while non‑matches remain bounded away, producing a margin that scales with T and rb.
