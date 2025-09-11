@@ -27,13 +27,11 @@ SigLIP/
 ### Conceptual Overview
 
 Let $U_i, V_i \in \mathbb{S}^{d-1}$ denote paired embeddings across two modalities (extendable to $M>2$ modalities). Define pairwise similarities
-$$
-s_{ij} = \langle U_i, V_j \rangle.
-$$
+$$s_{ij} = \langle U_i, V_j \rangle.$$
 The SigLIP objective treats matching vs non‑matching pairs as a binary classification problem with sigmoid logits. Using the relative bias parameterization (our preferred form) the (per‑batch) loss is
-$$
-\mathcal{L} = - \sum_{i,j} \Big[ y_{ij} \log \sigma\!\big( T ( s_{ij} - r_b ) \big) + (1-y_{ij}) \log \big( 1 - \sigma\!\big( T ( s_{ij} - r_b ) \big) \big) \Big],
-$$
+
+$$\mathcal{L} = - \sum_{i,j} \Big[ y_{ij} \log \sigma\big( T ( s_{ij} - r_b ) \big) + (1-y_{ij}) \log \big( 1 - \sigma\big( T ( s_{ij} - r_b ) \big) \big) \Big],$$
+
 where $y_{ij}=1$ iff $i=j$ (positive pair) and $0$ otherwise. We often normalize by $n^2$; the constant factor is omitted here.
 
 Parameterizations:
@@ -44,14 +42,13 @@ Parameterizations:
 They are related by $b = T\, r_b$. Directly optimizing $r_b$ avoids the coupling that can drive $b/T \to 0$ empirically.
 
 Margin (reported in figures) between matching and non‑matching similarities:
-$$
-\mathrm{margin} = \frac{ \min_i s_{ii} - \max_{i\neq j} s_{ij} }{2}.
-$$
+
+$$\mathrm{margin} = \frac{ \min_i s_{ii} - \max_{i\neq j} s_{ij} }{2}.$$
 
 In frozen‑modality + adapter experiments we introduce an interpolation scalar $\delta = \sigma(x)$ and extend dimensionality so effective paired vectors become
-$$
-\widetilde U_i = (\delta U_i, \sqrt{1-\delta^2}), \qquad \widetilde V_i = (\delta V_i, -\sqrt{1-\delta^2}),
-$$
+
+$$\widetilde U_i = (\delta U_i, \sqrt{1-\delta^2}), \qquad \widetilde V_i = (\delta V_i, -\sqrt{1-\delta^2}),$$
+
 preserving unit norm while controlling alignment strength via $\delta$.
 
 Geometric Predictions (validated here):
@@ -206,16 +203,6 @@ Questions / issues: open a GitHub issue or contact the authors.
 ---
 ### License
 Specify license terms here (e.g., MIT, Apache 2.0) – currently NOT PROVIDED in repo.
-
----
-### Checklist / Future Improvements
-* Add reproducible seeds & config loader.
-* Add automated unit tests for margin & parameterization invariants.
-* Provide benchmarking script for scaling to higher dimensions.
-* Integrate WandB / TensorBoard logging.
-
----
-End of README.
 
 
 
