@@ -1,25 +1,10 @@
-## SigLIP Synthetic + Empirical Experiments
+# SigLIP Experiments
 
 This directory contains the experiment code accompanying the paper:
 
 Global Minimizers of Sigmoid Contrastive Loss (Bangachev, Noman, Bresler, Polyanskiy, 2025).
 
 We study the sigmoid contrastive loss with *trainable inverse temperature* and *bias / relative bias* parameters. Our results characterize global minimizers, geometric constellation structure, modality gap, and optimization behavior under different parameterizations (absolute bias vs relative bias) and constraints (frozen modalities, adapters, multiple modalities, fixed vs trainable temperature, etc.). Throughout, $t$ denotes inverse temperature, $r_b$ the relative bias, and $b$ an absolute bias when that parameterization is used.
-
----
-### Repository Layout
-
-```
-SigLIP/
-	README.md              <- (this file)
-	*.ipynb                <- Individual experiment notebooks
-	utils/
-		siglip_loss.py       <- Sigmoid contrastive loss (trainable T + (relative) bias)
-		siglip_experiment.py <- Training harness for synthetic spherical embeddings
-		sphere_initialization.py <- Sampling utilities for unit-sphere initialization
-		plottingutils.py     <- Shared plotting + analysis helpers
-	logs/                  <- Generated figures (saved automatically by notebooks)
-```
 
 ---
 ### Conceptual Overview
@@ -34,8 +19,8 @@ where $y_{ij}=1$ iff $i=j$ (positive pair) and $0$ otherwise. We often normalize
 
 Parameterizations:
 
-* (Relative bias) logits: $\; t( s_{ij} - r_b)$ with trainable $t>0$ and $r_b\in \mathbb{R}$.
-* (Absolute bias) logits: $\; t s_{ij} - b$ with trainable $t>0,\; b\in \mathbb{R}$.
+* (Relative bias) logits: $ t( s_{ij} - r_b)$ with trainable $t>0$ and $r_b\in \mathbb{R}$.
+* (Absolute bias) logits: $ t s_{ij} - b$ with trainable $t>0, b\in \mathbb{R}$.
 
 They are related by $b = t\, r_b$. Directly optimizing $r_b$ avoids the coupling that can drive $b/t \to 0$ empirically.
 
@@ -81,7 +66,7 @@ preserving unit norm while controlling alignment strength via $\delta$.
 
 2. `MoreModalities.ipynb`
 		- Extends to $M \in \{4,6,8,10\}$ modalities. Joint optimization of all modality embeddings with shared $(t, r_b)$.
-		- Compares trainable vs fixed large temperature (ablation). Generates multi‑panel constellations and margin statistics (Figure 8 style) plus loss comparison (`multiplemodalities_loss_comparison.png`).
+		- Compares trainable vs fixed large temperature (ablation). Constellations and margin statistics (Figure 8 style) and loss comparison (`multiplemodalities_loss_comparison.png`).
 
 3. `FrozenModalityExperiments.ipynb`
 		- Freezes one modality ($U$) to simulate using a locked pretrained encoder while training $V$ and $(t, r_b)$.
@@ -103,35 +88,29 @@ preserving unit norm while controlling alignment strength via $\delta$.
 ### Pretrained Model Embedding Study
 
 `ImageNetEmbedding.ipynb`
-	- Downloads a Hugging Face SigLIP checkpoint.
+	- Downloads a Hugging Face SigLIP checkpoint (currently the .2B 'siglip-base-patch16-224' model).
 	- Embeds ImageNet validation (50k images, 1k classes) and corresponding text prompts / class names.
 	- Analyzes empirical pairwise similarities to verify:
-		* Constellation structure across classes.
-		* Non‑trivial modality gap (image vs text embedding centroids) — Figure 1 & 3 analogues.
+		* Constellation structure across classes - Figure 1.
+		* Modality gap — Figure 3 analogues.
 	- Produces margin plots & inner-product distributions (`single_experiment_inner_product_separation.png`, `siglip_similarities.png`, `siglip_margins.png`).
 
 ---
 ### Figures Directory (`logs/`)
 
 Representative saved outputs (non‑exhaustive):
-* `basicpicture.png` – Basic 2‑modality constellation.
-* `single_experiment_inner_product_separation.png` – Histogram separation.
-* `siglip_margins.png` / `siglip_similarities.png` – Margin vs rb and similarity bands.
-* `multiplemodalities_ip_separation.png` / `multiplemodalities_loss_comparison.png` – Multi‑modal geometry & optimization.
-* `ablationfixedlargetemperature.png` / `ablationtrainablelargetemperature.png` – Ablation on temperature training.
-* `bisavsrelativebias_*` – Evolution of relative bias under two parameterizations.
-* `frozenmodalities_ip_separation_.png` – Frozen modality adapter study.
+* `basicpicture.png` – Basic 2‑modality constellation in 3 dimensions found by running Adam on a random initialization.
+* `single_experiment_inner_product_separation.png` – Separation between inner-products of matching an non-matching texts.
+* `siglip_margins.png` / `siglip_similarities.png` – Margin vs rb when training with different values for a fixed relative bias.
+* `multiplemodalities_ip_separation.png` / `multiplemodalities_loss_comparison.png` – Experiments when training with multiple modalities. 
+* `ablationfixedlargetemperature.png` / `ablationtrainablelargetemperature.png` – Ablation study of training with a fixed large temperature instead of a trainable temperature parameter.
+* `bisavsrelativebias_*` – Comparision of training with a relative bias parameterizatio versus a bias parameterization.
+* `frozenmodalities_ip_separation_.png` Experiments when one modality is locked.
 
 ---
 ### Quick Start (Synthetic Experiments)
 
-Dependencies: Python 3.11+, PyTorch, matplotlib, numpy, (optional) Hugging Face transformers + datasets for ImageNet study (you must supply ImageNet or a subset; script expects accessible validation samples / class names).
-
-Minimal installation (example):
-```bash
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-pip install matplotlib numpy transformers datasets tqdm
-```
+Dependencies: Python 3.11+, PyTorch, matplotlib, numpy, Hugging Face transformers + ImageNet validation dataset (you will need the labels file `labels_text.txt').
 
 Run a basic synthetic experiment from a Python shell / notebook:
 ```python
@@ -173,15 +152,14 @@ U_ext,V_ext,crit,losses,temps,rb_hist,x = exp.train(fixed_U=U_fixed, explicit_ad
 
 ---
 ### Extending to More Modalities
-The `MoreModalities.ipynb` notebook shows a pattern: maintain a list of modality embedding Parameter tensors, compute all positive pairs (same index across modalities) vs negatives (all mismatched pairs) and sum per-pair sigmoid BCE. For large M or class count, memory can grow O(M^2 n^2); use minibatching or blockwise evaluation if scaling beyond demonstration sizes.
+The `MoreModalities.ipynb` notebook extends the framewok to more modalities via summing pairwise sigmoid lossses. F
 
 ---
 ### Key Empirical Takeaways
 1. Relative bias parameterization stabilizes optimization and preserves a non‑vanishing $r_b$.
-2. Trainable temperature is crucial for achieving large margins; fixing $t$ bottlenecks separation.
-3. Adapter scalar $\delta$ in frozen modality setting offers a controlled degree of geometric coupling.
-4. Multi‑modal extension exhibits predictable widening of non‑match similarity spread but preserves margin scaling with $t$.
-5. Pretrained SigLIP embeddings qualitatively match theoretical constellation + modality gap predictions.
+2. Trainable temperature is crucial for achieving an inner-product separation with large margins; fixing $t$ bottlenecks separation.
+3. Structure is preserved in the case of more than two modalities 
+4. Pretrained SigLIP models qualitatively match theoretical constellation + modality gap predictions.
 
 ---
 ### Citation
@@ -190,10 +168,6 @@ If you use this code or the synthetic framework, please cite the accompanying pa
 ---
 ### Contact
 Questions / issues: open a GitHub issue or contact the authors.
-
----
-### License
-Specify license terms here (e.g., MIT, Apache 2.0) – currently NOT PROVIDED in repo.
 
 
 
