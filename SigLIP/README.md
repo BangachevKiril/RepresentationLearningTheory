@@ -4,7 +4,7 @@ This directory contains the experiment code accompanying the paper:
 
 Global Minimizers of Sigmoid Contrastive Loss (Bangachev, Noman, Bresler, Polyanskiy, 2025).
 
-We study the sigmoid contrastive loss with *trainable inverse temperature* and *bias / relative bias* parameters. Our results characterize global minimizers, geometric constellation structure, modality gap, and optimization behavior under different parameterizations (absolute bias vs relative bias) and constraints (frozen modalities, adapters, multiple modalities, fixed vs trainable temperature, etc.). Throughout, $t$ denotes inverse temperature, $r_b$ the relative bias, and $b$ an absolute bias when that parameterization is used.
+We study the sigmoid contrastive loss with *trainable inverse temperature* and *bias* parameters. Our results characterize the geometry of global minimizers and show its relevanve to retrieval tasks and why it implies the modality gap. Throughout, $t$ denotes inverse temperature, $r_b$ the relative bias, and $b$ an absolute bias when that parameterization is used.
 
 ---
 ### Conceptual Overview
@@ -19,10 +19,10 @@ where $y_{ij}=1$ iff $i=j$ (positive pair) and $0$ otherwise. We often normalize
 
 Parameterizations:
 
-* (Relative bias) logits: $ t( s_{ij} - r_b)$ with trainable $t>0$ and $r_b\in \mathbb{R}$.
-* (Absolute bias) logits: $ t s_{ij} - b$ with trainable $t>0, b\in \mathbb{R}$.
+* (Relative bias) logits: $t( s_{ij} - r_b)$ with trainable $t>0$ and $r_b\in \mathbb{R}$.
+* (Absolute bias) logits: $t s_{ij} - b$ with trainable $t>0, b\in \mathbb{R}$.
 
-They are related by $b = t\, r_b$. Directly optimizing $r_b$ avoids the coupling that can drive $b/t \to 0$ empirically.
+They are related by $b = t\times r_b$.
 
 Margin (reported in figures) between matching and non‑matching similarities:
 
@@ -37,63 +37,59 @@ preserving unit norm while controlling alignment strength via $\delta$.
 ---
 ### Provided Utilities
 
-`utils/siglip_loss.py`
-	Implements SigLIPLoss with choices:
-	- trainable_temp (log‑parameterized) → exp(log_t)
-	- relative_bias_parameterization flag: if True learns rb directly; else learns absolute b
-	- numerically stable per‑pair binary cross entropy with sigmoid
+`utils/siglip_loss.py` Implements sigmoid loss over representations wit hteh following choices:
+* trainable_temp (log‑parameterized) → exp(log_t)
+* relative_bias_parameterization flag: if True learns rb directly; else learns absolute b
 
 `utils/siglip_experiment.py`
-	- Manages synthetic optimization of U, V (and optionally δ adapter scalar) using Adam.
-	- Normalizes embeddings each step (projection onto sphere).
-	- Tracks temperature/bias history (when return_t_b_history=True).
-	- Supports frozen U (fixed encoder analogue) and optional explicit adapter.
+* Optimization of representation U, V using Adam and normalizing embeddings at each step (projection onto sphere).
+* Supports frozen U (fixed encoder analogue) and optional explicit adapter.
 
 `utils/plottingutils.py`
-	- 3D constellation plotting (dim=3) with pair lines.
-	- Inner-product gap histograms (match vs non‑match).
-	- Margin computation and aggregate multi‑run analysis.
+* 3D plotting of representations with pair lines.
+* Inner-product gap histograms (matching vs non‑matching).
+* Margin computation and aggregate multi‑run analysis.
 
 `utils/sphere_initialization.py`
-	- Uniform sampling on S^{d-1}; hemisphere variants for controlled separation scenarios.
+* Uniform sampling on $S^{d-1}$.
 
 ---
 ### Experiment Notebooks (Synthetic)
 
 1. `BasicExperiment.ipynb`
-		- Two modalities $(U,V)$, $d=3$ for visualization, trainable $t$, (optionally) trainable $r_b$.
-	 	- Demonstrates emergence of a clear separation and growth of t; produces Figure 5 (constellation + loss curves + inner-product separation histogram).
+* Two modalities $(U,V)$, $d=3$ for visualization, trainable $t$, (optionally) trainable $r_b$.
+* Demonstrates emergence of a clear separation and growth of t; produces Figure 5 (constellation + loss curves + inner-product separation histogram).
 
 2. `MoreModalities.ipynb`
-		- Extends to $M \in \{4,6,8,10\}$ modalities. Joint optimization of all modality embeddings with shared $(t, r_b)$.
-		- Compares trainable vs fixed large temperature (ablation). Constellations and margin statistics (Figure 8 style) and loss comparison (`multiplemodalities_loss_comparison.png`).
+* Extends to $M \in \{4,6,8,10\}$ modalities. Joint optimization of all modality embeddings with shared $(t, r_b)$.
+* Compares trainable vs fixed large temperature (ablation). Constellations and margin statistics (Figure 8 style) and loss comparison (`multiplemodalities_loss_comparison.png`).
 
 3. `FrozenModalityExperiments.ipynb`
-		- Freezes one modality ($U$) to simulate using a locked pretrained encoder while training $V$ and $(t, r_b)$.
-		- Optional adapter scalar $\delta$ (through an extended embedding dimension) to interpolate geometry; logs $\delta$ and demonstrates maintained margin.
-	 - Produces figures `frozen_loss_comparison_.png`, `frozenmodalities_ip_separation_.png` etc.
+* Freezes one modality ($U$) to simulate using a locked pretrained encoder while training $V$ and $(t, r_b)$.
+* Optional adapter scalar $\delta$ (through an extended embedding dimension) to interpolate geometry; logs $\delta$ and demonstrates maintained margin.
+* Produces figures `frozen_loss_comparison_.png`, `frozenmodalities_ip_separation_.png` etc.
 
 4. `AblationStudy.ipynb`
-		- Systematically varies initial relative bias values and whether temperature is trainable vs fixed large value.
-		- Shows how fixing $t$ alters attainable margin and slows convergence (`ablationfixedlargetemperature.png`, `ablationtrainablelargetemperature.png`).
+* Systematically varies initial relative bias values and whether temperature is trainable vs fixed large value.
+* Shows how fixing $t$ alters attainable margin and slows convergence (`ablationfixedlargetemperature.png`, `ablationtrainablelargetemperature.png`).
 
 5. `BiasParamLeadsToZeroRB.ipynb`
-		- Compares absolute bias parameterization vs relative bias parameterization.
-		- Empirically shows $b/t \to 0$ when learning absolute bias, validating preference for direct $r_b$ parameterization (Appendix E.4). Figures: `bisavsrelativebias_evolution.png`, `bisavsrelativebias_losses.png`, `bisavsrelativebias_margins.png`.
+* Compares absolute bias parameterization vs relative bias parameterization.
+* Empirically shows $b/t \to 0$ when learning absolute bias, validating preference for direct $r_b$ parameterization (Appendix E.4). Figures: `bisavsrelativebias_evolution.png`, `bisavsrelativebias_losses.png`, `bisavsrelativebias_margins.png`.
 
 6. `FixedRelativeBias.ipynb`
-		- Trains embeddings with $r_b$ fixed (not trainable) while $t$ is trainable (or vice‑versa in variants) to isolate influence of $r_b$ on margin and geometry.
+*  Trains embeddings with $r_b$ fixed (not trainable) while $t$ is trainable (or vice‑versa in variants) to isolate influence of $r_b$ on margin and geometry.
 
 ---
 ### Pretrained Model Embedding Study
 
 `ImageNetEmbedding.ipynb`
-	- Downloads a Hugging Face SigLIP checkpoint (currently the .2B 'siglip-base-patch16-224' model).
-	- Embeds ImageNet validation (50k images, 1k classes) and corresponding text prompts / class names.
-	- Analyzes empirical pairwise similarities to verify:
-		* Constellation structure across classes - Figure 1.
-		* Modality gap — Figure 3 analogues.
-	- Produces margin plots & inner-product distributions (`single_experiment_inner_product_separation.png`, `siglip_similarities.png`, `siglip_margins.png`).
+* Downloads a Hugging Face SigLIP checkpoint (currently the .2B 'siglip-base-patch16-224' model).
+* Embeds ImageNet validation (50k images, 1k classes) and corresponding text prompts / class names.
+* Analyzes empirical pairwise similarities to verify:
+	* Constellation structure across classes - Figure 1.
+	* Modality gap — Figure 3 analogues.
+* Produces margin plots & inner-product distributions (`single_experiment_inner_product_separation.png`, `siglip_similarities.png`, `siglip_margins.png`).
 
 ---
 ### Figures Directory (`logs/`)
