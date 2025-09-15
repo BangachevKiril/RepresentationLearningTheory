@@ -91,6 +91,11 @@ preserving unit norm while controlling alignment strength via $\delta$.
 	* Modality gap — Figure 3 analogues.
 * Produces margin plots & inner-product distributions (`single_experiment_inner_product_separation.png`, `siglip_similarities.png`, `siglip_margins.png`).
 
+  
+`GeometryofTrainedModels.ipynb`
+* Performs embeddings with 7 other models and finds their margin and relative bias
+* Produced plot corresponds to Table 1 and Figure 7
+
 ---
 ### Figures Directory (`logs/`)
 
