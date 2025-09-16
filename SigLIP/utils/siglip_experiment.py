@@ -16,7 +16,7 @@ from .plottingutils import (
 
 class SigLIPExperiment:
     def __init__(self, n_classes=100, dim=3, n_epochs=int(5e4), device=None, when_to_print =100000,
-                 relative_bias_parameterization = True, return_t_b_history = False):
+                 relative_bias_parameterization = True, return_t_b_history = False, extra_stats = None):
         self.n_classes = n_classes
         self.dim = dim
         self.n_epochs = n_epochs
@@ -26,6 +26,8 @@ class SigLIPExperiment:
         self.when_to_print = when_to_print
         self.relative_bias_parameterization = relative_bias_parameterization
         self.return_t_b_history = return_t_b_history
+        self.extra_stat_history = []
+        self.extra_stats = extra_stats
 
     def train(self,
               relative_bias: float = 0.0,
@@ -113,6 +115,11 @@ class SigLIPExperiment:
                 # print(self.U.data.norm(dim =1, keepdim=True))
 
             losses.append(loss.item())
+
+            if self.extra_stats is not None:
+                with torch.no_grad():
+                    self.extra_stat_history.append(self.extra_stats(self.U, self.V))
+            
 
             if self.return_t_b_history:
                 tb = float(criterion.get_temperature())
